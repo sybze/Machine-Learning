@@ -1,0 +1,60 @@
+---
+title: "Machine Learning Assignment"
+author: "Stephan Bartelheim"
+date: "January 26, 2018"
+output: html_document
+---
+
+We first download the training and test data sets.
+
+```{r message=FALSE}
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile="training.csv")
+training<-read.csv("training.csv")
+file.remove("training.csv")
+
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile="testing.csv")
+testing<-read.csv("testing.csv")
+file.remove("testing.csv")
+dim(training)
+```
+Next we tidy the data a bit since simply fitting a complex model on a midsized data set with 159 explanatory variables is computationally very taxing.
+We remove all the time stamp variables since we want to predict the activity based on the motion metrics.
+Next we remove all columns with NAs since all the variables with missing values have missing values for almost 99% of cases and are therefore not very useful.
+In a last step we remove all variables with near zero variance since we can't classify on variables that don't vary.
+This leaves us with 53 independent variables.
+```{r message=FALSE}
+library(caret)
+trainRed<-training[,-c(1,3:7)]
+testRed<-testing[,-c(1,3:7)]
+NAs<-sapply(trainRed, function(y) sum(length(which(is.na(y)))))
+nonNA<-NAs==0
+trainRed<-trainRed[nonNA]
+testRed<-testRed[nonNA]
+nsv<-nearZeroVar(trainRed, saveMetrics = T)
+trainRed<-trainRed[!nsv[,4]]
+testRed<-testRed[!nsv[,4]]
+dim(trainRed)
+```
+
+Next we split the training set for cross validation in two. This avoids overfitting since we can test the model we obtain on out of sample data later.
+
+```{r}
+inTrain<-createDataPartition(trainRed$classe, p=0.7, list=FALSE)
+training<-trainRed[inTrain,]
+testing<-trainRed[-inTrain,]
+```
+
+We next set a seed to allow us to obtain the same model in repeated runs. We now train random forest model on the training data set. Random forest models do well in classification competitions and should therefore be a good choice here. When we use the model to predict the training data we can see that we get an accuracy of about 100%. On the test data we split off earlier we still get a very high accuracy of nearly 100% which means that we got a pretty good model here. We lastly use the model to predict the 20 test cases.
+
+```{r warning=FALSE}
+set.seed(444)
+modRF<-train(classe~.,method="rf", data=training)
+predTraining<-predict(modRF, newdata=training)
+confusionMatrix(predTraining, training$classe)
+predTesting<-predict(modRF, newdata=testing)
+confusionMatrix(predTesting, testing$classe)
+
+
+predTestRF<-predict(modRF, newdata=testRed)
+predTestRF
+```
